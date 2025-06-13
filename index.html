@@ -42,6 +42,32 @@
       border-radius: 10px;
     }
 
+    input[type="datetime-local"] {
+        display: block;
+        width: 100%;
+        max-width: 400px;
+        margin: 5px auto 15px;
+        padding: 15px;
+        font-size: 16px;
+        border: none;
+        border-radius: 10px;
+        background-color: #1e1e1e;
+        color: white;
+        box-sizing: border-box;
+    }
+
+    label {
+        font-weight: bold;
+        text-align: left;
+        display: block;
+        max-width: 400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+
+
+
     canvas, table {
       margin: 30px auto;
       max-width: 600px;
@@ -61,6 +87,7 @@
       background-color: #1e1e1e;
       border-collapse: collapse;
     }
+
 
     .delete-btn {
       background-color: #c62828;
@@ -85,6 +112,18 @@
     <h2>🕒 Last Session</h2>
     <p id="sessionDuration">Not recorded yet</p>
     <p id="sessionTimes"></p>
+  </div>
+
+  <div style="margin-top: 40px; max-width: 600px; margin-left: auto; margin-right: auto;">
+    <h2>➕ Add Session Manually</h2>
+
+    <label for="manualBedTime" style="display: block; margin: 10px 0 5px; text-align: left;">🛏️ Bed Time:</label>
+    <input type="datetime-local" id="manualBedTime" />
+
+    <label for="manualWakeTime" style="display: block; margin: 15px 0 5px; text-align: left;">☀️ Wake Time:</label>
+    <input type="datetime-local" id="manualWakeTime" />
+
+    <button id="addManualSession">📌 Add Session</button>
   </div>
 
   <button id="chartButton">📈 Show Chart</button>
@@ -271,6 +310,32 @@
         alert("Nothing to undo.");
       }
     };
+
+    document.getElementById("addManualSession").onclick = () => {
+        const bed = new Date(document.getElementById("manualBedTime").value);
+        const wake = new Date(document.getElementById("manualWakeTime").value);
+
+        if (isNaN(bed) || isNaN(wake) || bed >= wake) {
+            alert("⚠️ Please enter valid bed and wake times.");
+            return;
+        }
+
+        const duration = ((wake - bed) / (1000 * 60 * 60)).toFixed(2);
+        const history = getHistory();
+
+        const newEntry = {
+            id: Date.now(),
+            sleepTime: bed,
+            wakeTime: wake,
+            duration: parseFloat(duration)
+        };
+
+        history.push(newEntry);
+        saveHistory(history);
+        renderTableAndChart();
+        alert("✅ Manual sleep session added.");
+    };
+
 
     // Init
     renderTableAndChart();
