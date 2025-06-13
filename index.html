@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>😴 Sleep Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background-color: #121212;
+      color: white;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+
+    button, input[type="date"] {
+      display: block;
+      width: 100%;
+      max-width: 400px;
+      margin: 10px auto;
+      padding: 15px;
+      font-size: 16px;
+      border: none;
+      border-radius: 10px;
+      background-color: #1e88e5;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #1565c0;
+    }
+
+    #lastSession {
+      margin-top: 30px;
+      padding: 15px;
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+      background-color: #2c2c2c;
+      border-radius: 10px;
+    }
+
+    canvas, table {
+      margin: 30px auto;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    th, td {
+      padding: 10px;
+      border: 1px solid #333;
+    }
+
+    th {
+      background-color: #2e2e2e;
+    }
+
+    table {
+      background-color: #1e1e1e;
+      border-collapse: collapse;
+    }
+
+    .delete-btn {
+      background-color: #c62828;
+      margin: 0;
+    }
+
+    .undo-btn {
+      background-color: #6d4c41;
+    }
+  </style>
+</head>
+<body>
+  <h1>🌙 Sleep Tracker</h1>
+
+  <button id="bedButton">🛏️ I'm going to bed</button>
+  <button id="wakeButton">☀️ I just woke up</button>
+
+  <div id="lastSession">
+    <h2>🛌 Bed Time</h2>
+    <p id="bedTime">Not set</p>
+
+    <h2>🕒 Last Session</h2>
+    <p id="sessionDuration">Not recorded yet</p>
+    <p id="sessionTimes"></p>
+  </div>
+
+  <button id="chartButton">📈 Show Chart</button>
+  <button id="downloadCSV">📥 Download CSV</button>
+  <button id="undoDelete">↩️ Undo Delete</button>
+
+  <div style="margin: 20px auto; max-width: 600px;">
+    <input type="date" id="startDate">
+    <input type="date" id="endDate">
+    <button id="filterChart">🔍 Filter Chart</button>
+  </div>
+
+  <canvas id="sleepChart" width="600" height="300"></canvas>
+
+  <table id="sleepTable">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Bed Time</th>
+        <th>Wake Time</th>
+        <th>Duration</th>
+        <th>❌</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    let sleepTime = null;
+    let undoStack = [];
+
+    const bedBtn = document.getElementById("bedButton");
+    const wakeBtn = document.getElementById("wakeButton");
+    const chartBtn = document.getElementById("chartButton");
+    const undoBtn = document.getElementById("undoDelete");
+    const downloadBtn = document.getElementById("downloadCSV");
+    const filterBtn = document.getElementById("filterChart");
+
+    const chartCanvas = document.getElementById("sleepChart");
+    const tableBody = document.querySelector("#sleepTable tbody");
+
+    let currentChart;
+
+    function renderTableAndChart() {
+      const history = getFilteredHistory();
+      tableBody.innerHTML = "";
+      history.forEach((entry, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${new Date(entry.sleepTime).toLocaleDateString()}</td>
+          <td>${new Date(entry.sleepTime).toLocaleTimeString()}</td>
+          <td>${new Date(entry.wakeTime).toLocaleTimeString()}</td>
+          <td>${entry.duration}</td>
+          <td><button class="delete-btn" onclick="deleteEntry(${entry.id})">❌</button></td>
+        `;
+        tableBody.appendChild(row);
+      });
+
+      const labels = history.map(e => new Date(e.sleepTime).toLocaleDateString());
+      const durations = history.map(e => e.duration);
+
+      if (currentChart) currentChart.destroy();
+
+      const ctx = chartCanvas.getContext("2d");
+      currentChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Sleep Duration (hours)',
+            data: durations,
+            borderColor: 'rgba(54, 162, 235, 1)',
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            tension: 0.3,
+            fill: true
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 12
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: 'white' }
+            }
+          }
+        }
+      });
+    }
+
+    function getHistory() {
+      return JSON.parse(localStorage.getItem("sleepHistory") || "[]");
+    }
+
+    function saveHistory(data) {
+      localStorage.setItem("sleepHistory", JSON.stringify(data));
+    }
+
+    function getFilteredHistory() {
+      const start = new Date(document.getElementById("startDate").value || 0);
+      const end = new Date(document.getElementById("endDate").value || 9999999999999);
+      return getHistory().filter(entry => {
+        const d = new Date(entry.sleepTime);
+        return d >= start && d <= end;
+      });
+    }
+
+    bedBtn.onclick = () => {
+      sleepTime = new Date();
+      localStorage.setItem("sleepTime", sleepTime);
+      document.getElementById("bedTime").textContent = sleepTime.toLocaleTimeString();
+      alert("🛏️ Sleep time recorded!");
+    };
+
+    wakeBtn.onclick = () => {
+      const wakeTime = new Date();
+      const storedTime = new Date(localStorage.getItem("sleepTime"));
+      const durationHrs = ((wakeTime - storedTime) / (1000 * 60 * 60)).toFixed(2);
+
+      document.getElementById("sessionDuration").textContent = `${durationHrs} hours`;
+      document.getElementById("sessionTimes").textContent = `${storedTime.toLocaleTimeString()} → ${wakeTime.toLocaleTimeString()}`;
+
+      const history = getHistory();
+      const newEntry = {
+        id: Date.now(),
+        sleepTime: storedTime,
+        wakeTime: wakeTime,
+        duration: parseFloat(durationHrs)
+      };
+      history.push(newEntry);
+      saveHistory(history);
+      renderTableAndChart();
+    };
+
+    chartBtn.onclick = () => {
+      renderTableAndChart();
+    };
+
+    filterBtn.onclick = () => {
+      renderTableAndChart();
+    };
+
+    downloadBtn.onclick = () => {
+      const history = getHistory();
+      let csv = "Date,Bed Time,Wake Time,Duration (hrs)\n";
+      history.forEach(entry => {
+        const d = new Date(entry.sleepTime).toLocaleDateString();
+        const bt = new Date(entry.sleepTime).toLocaleTimeString();
+        const wt = new Date(entry.wakeTime).toLocaleTimeString();
+        csv += `${d},${bt},${wt},${entry.duration}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "sleep_data.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    function deleteEntry(id) {
+      const history = getHistory();
+      const index = history.findIndex(e => e.id === id);
+      if (index !== -1) {
+        undoStack.push(history[index]);
+        history.splice(index, 1);
+        saveHistory(history);
+        renderTableAndChart();
+      }
+    }
+
+    undoBtn.onclick = () => {
+      const lastDeleted = undoStack.pop();
+      if (lastDeleted) {
+        const history = getHistory();
+        history.push(lastDeleted);
+        saveHistory(history);
+        renderTableAndChart();
+      } else {
+        alert("Nothing to undo.");
+      }
+    };
+
+    // Init
+    renderTableAndChart();
+  </script>
+</body>
+</html>
